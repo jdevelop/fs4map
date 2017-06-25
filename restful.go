@@ -16,6 +16,7 @@ func main() {
 
 	port := flag.Int("port", 8080, "port to listen on")
 	host := flag.String("host", "localhost", "port to listen on")
+	prefix := flag.String("prefix", "/api/", "url prefix, must end with /")
 	flag.Parse()
 
 	viper.SetConfigName("config")
@@ -35,14 +36,14 @@ func main() {
 
 	svc := httprouter.New()
 
-	svc.GET("/preauth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	svc.GET(*prefix+"preauth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Add("Content-Type", "application/json")
 		enc := json.NewEncoder(w)
 		enc.Encode(PreauthResponse{Url: authUrl})
 	})
 
-	svc.GET("/auth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	svc.GET(*prefix+"export", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		u, _ := url.Parse(r.RequestURI)
 		tokenStr := u.Query().Get("code")
 
