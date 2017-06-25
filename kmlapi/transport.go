@@ -59,6 +59,16 @@ func FetchVenues(token FSQToken, before *time.Time, after *time.Time) ([]Venue, 
 		return nil, err
 	}
 
+	type fsqResponse struct {
+		Response struct {
+			Venues struct {
+				Items []struct {
+					Venue Venue `json:"venue"`
+				} `json:"items"`
+			} `json:"venues"`
+		} `json:"response"`
+	}
+
 	fsq := fsqResponse{}
 
 	json.Unmarshal(content, &fsq)

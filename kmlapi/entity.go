@@ -25,16 +25,6 @@ type Venue struct {
 	Categories []Category `json:"categories"`
 }
 
-type fsqResponse struct {
-	Response struct {
-		Venues struct {
-			Items []struct {
-				Venue Venue `json:"venue"`
-			} `json:"items"`
-		} `json:"venues"`
-	} `json:"response"`
-}
-
 type GlobalCategory struct {
 	HasId
 	HasName
