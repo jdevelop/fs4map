@@ -175,6 +175,12 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 	if !strings.Contains(out, "Visit count: 2") {
 		t.Fatalf("expected visit count in KML output, got: %s", out)
 	}
+	if !strings.Contains(out, "<ExtendedData>") {
+		t.Fatalf("expected ExtendedData in KML output, got: %s", out)
+	}
+	if !strings.Contains(out, "visit_timestamps_unix") {
+		t.Fatalf("expected visit_timestamps_unix field in KML output, got: %s", out)
+	}
 }
 
 func TestBuildKMLReturnsErrorWhenVenueHistoryFails(t *testing.T) {

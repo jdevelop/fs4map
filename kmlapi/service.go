@@ -1,8 +1,10 @@
 package kmlapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/twpayne/go-kml"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -63,6 +65,15 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.Compoun
 
 	k := kml.KML()
 	d := kml.Document()
+	d.Add(
+		kml.Schema(
+			"visit-metadata",
+			"VisitMetadata",
+			kml.SimpleField("visit_count", "int"),
+			kml.SimpleField("last_visit_unix", "int"),
+			kml.SimpleField("visit_timestamps_unix", "string"),
+		),
+	)
 
 	categoriesMap, idToName, err := ResolveCategories(token)
 	if err != nil {
@@ -73,6 +84,7 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.Compoun
 		place := kml.Placemark(
 			kml.Name(item.Name),
 			kml.Description(buildVisitDescription(item.VisitTimestamps)),
+			buildVisitExtendedData(item.VisitTimestamps),
 			kml.Point(
 				kml.Coordinates(kml.Coordinate{Lon: item.Location.Lng, Lat: item.Location.Lat}),
 			),
@@ -119,4 +131,25 @@ func buildVisitDescription(timestamps []int64) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func buildVisitExtendedData(timestamps []int64) *kml.CompoundElement {
+	lastVisit := int64(0)
+	if len(timestamps) > 0 {
+		lastVisit = timestamps[0]
+	}
+
+	jsonTimestamps, err := json.Marshal(timestamps)
+	if err != nil {
+		jsonTimestamps = []byte("[]")
+	}
+
+	return kml.ExtendedData(
+		kml.SchemaData(
+			"#visit-metadata",
+			kml.SimpleData("visit_count", strconv.Itoa(len(timestamps))),
+			kml.SimpleData("last_visit_unix", strconv.FormatInt(lastVisit, 10)),
+			kml.SimpleData("visit_timestamps_unix", string(jsonTimestamps)),
+		),
+	)
 }
