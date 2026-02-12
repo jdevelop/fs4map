@@ -1,14 +1,18 @@
 package main
 
 import (
-	"github.com/jdevelop/fs4map/kmlapi"
-	"os"
-	"time"
-	"github.com/spf13/viper"
-	"github.com/julienschmidt/httprouter"
+	"flag"
+	"fmt"
+	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
+	"time"
+
+	"github.com/jdevelop/fs4map/kmlapi"
+	"github.com/julienschmidt/httprouter"
+	"github.com/spf13/viper"
 )
 
 const Year = time.Duration(24*365) * time.Hour
@@ -16,52 +20,90 @@ const Year = time.Duration(24*365) * time.Hour
 type TopLevel map[string]string
 type Root map[string]string
 
+const (
+	ClientId          = "client.id"
+	ClientRedirectUrl = "client.redirect.url"
+	ClientToken       = "client.token"
+	ClientSecret      = "client.secret"
+	DatePattern       = "2006-01-02"
+)
+
+var (
+	before     = time.Now()
+	after      = before.Add(-(10 * Year)) // could fail
+	flagBefore = flag.String("to", before.Format(DatePattern), "start date")
+	flagAfter  = flag.String("from", after.Format(DatePattern), "end date")
+)
+
 func main() {
+
+	flag.Parse()
 
 	viper.SetConfigName("config")
 	viper.AddConfigPath("$HOME/.kmlexport")
 	err := viper.ReadInConfig()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
+	}
+	var token = viper.GetString(ClientToken)
+
+	if token == "" {
+
+		authUrl := kmlapi.PreAuthenticate(viper.GetString(ClientId), viper.GetString(ClientRedirectUrl))
+
+		svc := httprouter.New()
+
+		var wait sync.WaitGroup
+		wait.Add(1)
+
+		svc.GET("/api/export", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+			u, _ := url.Parse(r.RequestURI)
+			codeStr := u.Query().Get("code")
+			authToken, err := kmlapi.Authenticate(viper.GetString(ClientId),
+				viper.GetString(ClientSecret),
+				codeStr,
+				viper.GetString(ClientRedirectUrl),
+			)
+			if err != nil {
+				log.Fatal(err)
+			}
+			token = authToken
+			viper.Set(ClientToken, token)
+			if err := viper.WriteConfig(); err != nil {
+				log.Fatal(err)
+			}
+			log.Println("Token saved successfully")
+			wait.Done()
+		})
+
+		log.Println("Started server on :8080")
+
+		go http.ListenAndServe(":8080", svc)
+
+		println(authUrl)
+		wait.Wait()
 	}
 
-	authUrl := kmlapi.PreAuthenticate(viper.GetString("client.id"), viper.GetString("client.redirect.url"))
+	if v, err := time.Parse(DatePattern, *flagBefore); err == nil {
+		before = v
+	} else {
+		log.Println("using default end time", before)
+	}
+	if v, err := time.Parse(DatePattern, *flagAfter); err == nil {
+		after = v
+	} else {
+		log.Println("using default start time", after)
+	}
 
-	svc := httprouter.New()
-
-	var tokenStr string
-
-	wait := sync.WaitGroup{}
-	wait.Add(1)
-
-	svc.GET("/auth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		u, _ := url.Parse(r.RequestURI)
-		tokenStr = u.Query().Get("code")
-		wait.Done()
-	})
-
-	go http.ListenAndServe(":8080", svc)
-
-	println(authUrl)
-
-	wait.Wait()
-
-	before := time.Now()
-	after := before.Add(- (7 * Year))
-
-	token, err := kmlapi.Authenticate(viper.GetString("client.id"),
-		viper.GetString("client.secret"),
-		tokenStr,
-		viper.GetString("client.redirect.url"),
-	)
-
+	k, err := kmlapi.BuildKML(kmlapi.NewToken(token), &before, &after)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
-	k := kmlapi.BuildKML(kmlapi.NewToken(token), &before, &after)
-
-	w, _ := os.Create("/tmp/kml.kml")
+	w, err := os.Create(fmt.Sprintf("export-%s-%s.kml", after.Format(DatePattern), before.Format(DatePattern)))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	k.WriteIndent(w, "", "  ")
 	w.Sync()

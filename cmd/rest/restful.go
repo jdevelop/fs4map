@@ -1,28 +1,30 @@
 package main
 
 import (
-	"github.com/spf13/viper"
-	"github.com/jdevelop/fs4map/kmlapi"
-	"github.com/julienschmidt/httprouter"
-	"net/http"
 	"encoding/json"
-	"net/url"
-	"time"
 	"flag"
 	"fmt"
+	"github.com/jdevelop/fs4map/kmlapi"
+	"github.com/julienschmidt/httprouter"
+	"github.com/spf13/viper"
+	"net/http"
+	"net/url"
+	"time"
+)
+
+var (
+	port   = flag.Int("port", 8080, "port to listen on")
+	host   = flag.String("host", "localhost", "port to listen on")
+	prefix = flag.String("prefix", "/api/", "url prefix, must end with /")
 )
 
 func main() {
 
-	port := flag.Int("port", 8080, "port to listen on")
-	host := flag.String("host", "localhost", "port to listen on")
-	prefix := flag.String("prefix", "/api/", "url prefix, must end with /")
 	flag.Parse()
 
 	viper.SetConfigName("config")
 	viper.AddConfigPath("$HOME/.kmlexport")
-	err := viper.ReadInConfig()
-	if err != nil {
+	if err := viper.ReadInConfig(); err != nil {
 		panic(err)
 	}
 
@@ -48,7 +50,7 @@ func main() {
 		tokenStr := u.Query().Get("code")
 
 		before := time.Now()
-		after := before.Add(- (7 * kmlapi.Year))
+		after := before.Add(-(7 * kmlapi.Year))
 
 		token, err := kmlapi.Authenticate(viper.GetString("client.id"),
 			viper.GetString("client.secret"),
@@ -59,7 +61,12 @@ func main() {
 		if err != nil {
 			http.Error(w, "Can not fetch checkins", 500)
 		} else {
-			k := kmlapi.BuildKML(kmlapi.NewToken(token), &before, &after)
+			k, err := kmlapi.BuildKML(kmlapi.NewToken(token), &before, &after)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+				return
+			}
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Content-Disposition", "attachment; filename=kml-export.kml")
 			w.Header().Add("Content-Type", "application/vnd.google-earth.kml+xml")

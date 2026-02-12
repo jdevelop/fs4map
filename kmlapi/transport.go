@@ -1,15 +1,21 @@
 package kmlapi
 
 import (
-	"time"
-	"net/http"
-	"io/ioutil"
 	"encoding/json"
-	"net/url"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type FSQToken string
+
+var defaultHTTPClient = &http.Client{
+	Timeout: 15 * time.Second,
+}
 
 const (
 	fsqBase       = "https://api.foursquare.com/v2"
@@ -30,6 +36,37 @@ func commonQuery(token FSQToken) url.Values {
 	return q
 }
 
+func getJSON(urlStr string, out interface{}) error {
+	resp, err := defaultHTTPClient.Get(urlStr)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		content, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if readErr != nil {
+			return fmt.Errorf("request failed with status %s", resp.Status)
+		}
+		msg := strings.TrimSpace(string(content))
+		if msg == "" {
+			return fmt.Errorf("request failed with status %s", resp.Status)
+		}
+		return fmt.Errorf("request failed with status %s: %s", resp.Status, msg)
+	}
+
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if err := json.Unmarshal(content, out); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func NewToken(s string) FSQToken {
 	return FSQToken(s)
 }
@@ -39,25 +76,13 @@ func FetchVenues(token FSQToken, before *time.Time, after *time.Time) ([]Venue, 
 	q := commonQuery(token)
 
 	if before != nil {
-		q.Add("beforeTimestamp", fmt.Sprintf("%1d", before.Unix()))
+		q.Add("beforeTimestamp", strconv.FormatInt(before.Unix(), 10))
 	}
 	if after != nil {
-		q.Add("afterTimestamp", fmt.Sprintf("%1d", after.Unix()))
+		q.Add("afterTimestamp", strconv.FormatInt(after.Unix(), 10))
 	}
 
 	urlStr := fsqHistory + q.Encode()
-
-	resp, err := http.Get(urlStr)
-
-	if err != nil {
-		return nil, err
-	}
-
-	content, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
-		return nil, err
-	}
 
 	type fsqResponse struct {
 		Response struct {
@@ -70,37 +95,25 @@ func FetchVenues(token FSQToken, before *time.Time, after *time.Time) ([]Venue, 
 	}
 
 	fsq := fsqResponse{}
-
-	json.Unmarshal(content, &fsq)
-
+	if err := getJSON(urlStr, &fsq); err != nil {
+		return nil, err
+	}
 	venues := make([]Venue, len(fsq.Response.Venues.Items))
-
 	for i, v := range fsq.Response.Venues.Items {
 		venues[i] = v.Venue
 	}
 
-	return venues, err
+	return venues, nil
 }
 
 func FetchCategories(token FSQToken) ([]GlobalCategory, error) {
 	q := commonQuery(token)
-
 	urlStr := fsqCategories + q.Encode()
-	resp, err := http.Get(urlStr)
 
-	if err != nil {
+	var fsq fsqCategory
+	if err := getJSON(urlStr, &fsq); err != nil {
 		return nil, err
 	}
-
-	content, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
-		return nil, err
-	}
-
-	fsq := fsqCategory{}
-
-	json.Unmarshal(content, &fsq)
 
 	return fsq.Response.Categories, nil
 }
@@ -120,26 +133,14 @@ func Authenticate(clientId string, clientSecret string, code string, redirectUri
 	q.Add("client_secret", clientSecret)
 	q.Add("code", code)
 
-	resp, err := http.Get(fsqOAuth2Token + q.Encode())
-
-	if err != nil {
-		return "", err
-	}
-
 	type AuthResponse struct {
 		AccessToken string `json:"access_token"`
 	}
 
-	content, err := ioutil.ReadAll(resp.Body)
-
-	if err != nil {
+	var tokenResponse AuthResponse
+	if err := getJSON(fsqOAuth2Token+q.Encode(), &tokenResponse); err != nil {
 		return "", err
 	}
 
-	tokenResponse := AuthResponse{}
-
-	json.Unmarshal(content, &tokenResponse)
-
 	return tokenResponse.AccessToken, nil
-
 }

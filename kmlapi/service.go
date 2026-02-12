@@ -10,18 +10,17 @@ const Year = time.Duration(24*365) * time.Hour
 type TopLevel map[string]string
 type Root map[string]string
 
-func ResolveCategories(token FSQToken) (root Root, idToName TopLevel) {
-
-	root = make(map[string]string)
-
-	idToName = make(map[string]string)
+func ResolveCategories(token FSQToken) (Root, TopLevel, error) {
 
 	cats, err := FetchCategories(token)
 
 	if err != nil {
-		println(err)
-		return nil, nil
+		return nil, nil, err
 	}
+
+	root := make(map[string]string)
+
+	idToName := make(map[string]string)
 
 	var walk func(*GlobalCategory, string)
 
@@ -41,10 +40,10 @@ func ResolveCategories(token FSQToken) (root Root, idToName TopLevel) {
 		walk(&c, c.Id)
 	}
 
-	return root, idToName
+	return root, idToName, nil
 }
 
-func BuildKML(token FSQToken, before *time.Time, after *time.Time) *kml.CompoundElement {
+func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.CompoundElement, error) {
 
 	venues, _ := FetchVenues(token, before, after)
 
@@ -53,7 +52,10 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) *kml.Compound
 	k := kml.KML()
 	d := kml.Document()
 
-	categoriesMap, idToName := ResolveCategories(token)
+	categoriesMap, idToName, err := ResolveCategories(token)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, item := range venues {
 		place := kml.Placemark(
@@ -81,6 +83,5 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) *kml.Compound
 	}
 
 	k.Add(d)
-	return k
+	return k, nil
 }
-
