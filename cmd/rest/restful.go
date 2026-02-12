@@ -8,7 +8,6 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/viper"
 	"net/http"
-	"net/url"
 	"time"
 )
 
@@ -46,8 +45,7 @@ func main() {
 	})
 
 	svc.GET(*prefix+"export", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		u, _ := url.Parse(r.RequestURI)
-		tokenStr := u.Query().Get("code")
+		tokenStr := r.URL.Query().Get("code")
 
 		before := time.Now()
 		after := before.Add(-(7 * kmlapi.Year))

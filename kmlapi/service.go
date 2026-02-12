@@ -45,7 +45,10 @@ func ResolveCategories(token FSQToken) (Root, TopLevel, error) {
 
 func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.CompoundElement, error) {
 
-	venues, _ := FetchVenues(token, before, after)
+	venues, err := FetchVenues(token, before, after)
+	if err != nil {
+		return nil, err
+	}
 
 	folders := make(map[string]*kml.CompoundElement)
 

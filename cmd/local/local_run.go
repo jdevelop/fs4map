@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -57,8 +56,7 @@ func main() {
 		wait.Add(1)
 
 		svc.GET("/api/export", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-			u, _ := url.Parse(r.RequestURI)
-			codeStr := u.Query().Get("code")
+			codeStr := r.URL.Query().Get("code")
 			authToken, err := kmlapi.Authenticate(viper.GetString(ClientId),
 				viper.GetString(ClientSecret),
 				codeStr,
