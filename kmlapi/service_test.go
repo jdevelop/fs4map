@@ -111,7 +111,7 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 						}
 					]
 				}
-			}`)
+				}`)
 		case "/v2/users/self/venuehistory":
 			fmt.Fprint(w, `{
 				"response": {
@@ -124,6 +124,24 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 									"location": {"lat": 1.1, "lng": 2.2},
 									"categories": [{"id": "child-coffee", "name": "Coffee Shop"}]
 								}
+							}
+						]
+					}
+				}
+				}`)
+		case "/v2/users/self/checkins":
+			fmt.Fprint(w, `{
+				"response": {
+					"checkins": {
+						"count": 2,
+						"items": [
+							{
+								"createdAt": 1770785520,
+								"venue": {"id": "v1"}
+							},
+							{
+								"createdAt": 1770770687,
+								"venue": {"id": "v1"}
 							}
 						]
 					}
@@ -153,6 +171,9 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 	}
 	if !strings.Contains(out, "<name>Cafe One</name>") {
 		t.Fatalf("expected placemark name in KML output, got: %s", out)
+	}
+	if !strings.Contains(out, "Visit count: 2") {
+		t.Fatalf("expected visit count in KML output, got: %s", out)
 	}
 }
 

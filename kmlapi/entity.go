@@ -21,8 +21,9 @@ type Category struct {
 type Venue struct {
 	HasId
 	HasName
-	Location   Location   `json:"location"`
-	Categories []Category `json:"categories"`
+	Location        Location   `json:"location"`
+	Categories      []Category `json:"categories"`
+	VisitTimestamps []int64    `json:"-"`
 }
 
 type GlobalCategory struct {

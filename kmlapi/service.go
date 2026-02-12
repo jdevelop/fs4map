@@ -1,7 +1,9 @@
 package kmlapi
 
 import (
+	"fmt"
 	"github.com/twpayne/go-kml"
+	"strings"
 	"time"
 )
 
@@ -49,6 +51,13 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.Compoun
 	if err != nil {
 		return nil, err
 	}
+	checkinsByVenue, err := FetchCheckins(token, before, after)
+	if err != nil {
+		return nil, err
+	}
+	for i := range venues {
+		venues[i].VisitTimestamps = checkinsByVenue[venues[i].Id]
+	}
 
 	folders := make(map[string]*kml.CompoundElement)
 
@@ -63,6 +72,7 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.Compoun
 	for _, item := range venues {
 		place := kml.Placemark(
 			kml.Name(item.Name),
+			kml.Description(buildVisitDescription(item.VisitTimestamps)),
 			kml.Point(
 				kml.Coordinates(kml.Coordinate{Lon: item.Location.Lng, Lat: item.Location.Lat}),
 			),
@@ -87,4 +97,26 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.Compoun
 
 	k.Add(d)
 	return k, nil
+}
+
+func buildVisitDescription(timestamps []int64) string {
+	if len(timestamps) == 0 {
+		return "Visit count: 0"
+	}
+
+	lines := []string{
+		fmt.Sprintf("Visit count: %d", len(timestamps)),
+		fmt.Sprintf("Last visit (UTC): %s", time.Unix(timestamps[0], 0).UTC().Format(time.RFC3339)),
+		"Recent visits (UTC):",
+	}
+
+	limit := 5
+	if len(timestamps) < limit {
+		limit = len(timestamps)
+	}
+	for i := 0; i < limit; i++ {
+		lines = append(lines, time.Unix(timestamps[i], 0).UTC().Format(time.RFC3339))
+	}
+
+	return strings.Join(lines, "\n")
 }
