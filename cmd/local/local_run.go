@@ -57,20 +57,29 @@ func main() {
 
 		svc.GET("/api/export", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			codeStr := r.URL.Query().Get("code")
+			if codeStr == "" {
+				http.Error(w, "missing code query parameter", http.StatusBadRequest)
+				return
+			}
 			authToken, err := kmlapi.Authenticate(viper.GetString(ClientId),
 				viper.GetString(ClientSecret),
 				codeStr,
 				viper.GetString(ClientRedirectUrl),
 			)
 			if err != nil {
-				log.Fatal(err)
+				log.Printf("authenticate failed: %v", err)
+				http.Error(w, "authentication failed", http.StatusBadGateway)
+				return
 			}
 			token = authToken
 			viper.Set(ClientToken, token)
 			if err := viper.WriteConfig(); err != nil {
-				log.Fatal(err)
+				log.Printf("failed to write config: %v", err)
+				http.Error(w, "failed to persist token", http.StatusInternalServerError)
+				return
 			}
 			log.Println("Token saved successfully")
+			w.WriteHeader(http.StatusNoContent)
 			wait.Done()
 		})
 

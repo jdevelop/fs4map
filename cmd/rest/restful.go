@@ -7,6 +7,7 @@ import (
 	"github.com/jdevelop/fs4map/kmlapi"
 	"github.com/julienschmidt/httprouter"
 	"github.com/spf13/viper"
+	"log"
 	"net/http"
 	"time"
 )
@@ -24,7 +25,8 @@ func main() {
 	viper.SetConfigName("config")
 	viper.AddConfigPath("$HOME/.kmlexport")
 	if err := viper.ReadInConfig(); err != nil {
-		panic(err)
+		log.Printf("failed to read config: %v", err)
+		return
 	}
 
 	authUrl := kmlapi.PreAuthenticate(viper.GetString("client.id"), viper.GetString("client.redirect.url"))
@@ -46,6 +48,10 @@ func main() {
 
 	svc.GET(*prefix+"export", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		tokenStr := r.URL.Query().Get("code")
+		if tokenStr == "" {
+			http.Error(w, "missing code query parameter", http.StatusBadRequest)
+			return
+		}
 
 		before := time.Now()
 		after := before.Add(-(7 * kmlapi.Year))
@@ -72,6 +78,8 @@ func main() {
 		}
 	})
 
-	http.ListenAndServe(fmt.Sprintf("%1s:%2d", *host, *port), svc)
+	if err := http.ListenAndServe(fmt.Sprintf("%1s:%2d", *host, *port), svc); err != nil {
+		log.Printf("server stopped: %v", err)
+	}
 
 }
