@@ -76,7 +76,7 @@ func NewToken(s string) FSQToken {
 	return FSQToken(s)
 }
 
-func FetchVenues(token FSQToken, before *time.Time, after *time.Time) ([]Venue, error) {
+func FetchVenues(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) ([]Venue, error) {
 
 	q := commonQuery(token)
 
@@ -92,6 +92,7 @@ func FetchVenues(token FSQToken, before *time.Time, after *time.Time) ([]Venue, 
 	type fsqResponse struct {
 		Response struct {
 			Venues struct {
+				Count int `json:"count"`
 				Items []struct {
 					Venue Venue `json:"venue"`
 				} `json:"items"`
@@ -107,6 +108,7 @@ func FetchVenues(token FSQToken, before *time.Time, after *time.Time) ([]Venue, 
 	for i, v := range fsq.Response.Venues.Items {
 		venues[i] = v.Venue
 	}
+	reportProgress(progress, "venues", len(venues), fsq.Response.Venues.Count)
 
 	return venues, nil
 }
@@ -123,7 +125,7 @@ func FetchCategories(token FSQToken) ([]GlobalCategory, error) {
 	return fsq.Response.Categories, nil
 }
 
-func FetchCheckins(token FSQToken, before *time.Time, after *time.Time) (map[string][]int64, error) {
+func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) (map[string][]int64, error) {
 	type checkinItem struct {
 		CreatedAt int64 `json:"createdAt"`
 		Venue     struct {
@@ -182,6 +184,7 @@ func FetchCheckins(token FSQToken, before *time.Time, after *time.Time) (map[str
 		}
 
 		offset += len(items)
+		reportProgress(progress, "checkins", offset, fsq.Response.Checkins.Count)
 		if offset >= fsq.Response.Checkins.Count {
 			break
 		}

@@ -13,6 +13,13 @@ const Year = time.Duration(24*365) * time.Hour
 
 type TopLevel map[string]string
 type Root map[string]string
+type ProgressCallback func(stage string, fetched int, total int)
+
+func reportProgress(progress ProgressCallback, stage string, fetched int, total int) {
+	if progress != nil {
+		progress(stage, fetched, total)
+	}
+}
 
 func ResolveCategories(token FSQToken) (Root, TopLevel, error) {
 
@@ -48,12 +55,16 @@ func ResolveCategories(token FSQToken) (Root, TopLevel, error) {
 }
 
 func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.CompoundElement, error) {
+	return BuildKMLWithProgress(token, before, after, nil)
+}
 
-	venues, err := FetchVenues(token, before, after)
+func BuildKMLWithProgress(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) (*kml.CompoundElement, error) {
+
+	venues, err := FetchVenues(token, before, after, progress)
 	if err != nil {
 		return nil, err
 	}
-	checkinsByVenue, err := FetchCheckins(token, before, after)
+	checkinsByVenue, err := FetchCheckins(token, before, after, progress)
 	if err != nil {
 		return nil, err
 	}

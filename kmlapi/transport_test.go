@@ -61,7 +61,7 @@ func TestFetchCheckinsPaginatesAndAggregatesByVenue(t *testing.T) {
 	before := time.Unix(1000, 0)
 	after := time.Unix(10, 0)
 
-	byVenue, err := FetchCheckins(NewToken("token"), &before, &after)
+	byVenue, err := FetchCheckins(NewToken("token"), &before, &after, nil)
 	if err != nil {
 		t.Fatalf("FetchCheckins returned error: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestFetchCheckinsReturnsErrorOnNon2xx(t *testing.T) {
 		http.Error(w, "upstream down", http.StatusBadGateway)
 	})
 
-	_, err := FetchCheckins(NewToken("token"), nil, nil)
+	_, err := FetchCheckins(NewToken("token"), nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for non-2xx checkins response")
 	}

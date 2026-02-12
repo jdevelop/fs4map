@@ -65,7 +65,13 @@ func main() {
 		if err != nil {
 			http.Error(w, "Can not fetch checkins", 500)
 		} else {
-			k, err := kmlapi.BuildKML(kmlapi.NewToken(token), &before, &after)
+			k, err := kmlapi.BuildKMLWithProgress(kmlapi.NewToken(token), &before, &after, func(stage string, fetched int, total int) {
+				if total > 0 {
+					log.Printf("export progress stage=%s fetched=%d total=%d (%.1f%%)", stage, fetched, total, (float64(fetched)*100.0)/float64(total))
+					return
+				}
+				log.Printf("export progress stage=%s fetched=%d", stage, fetched)
+			})
 			if err != nil {
 				w.WriteHeader(http.StatusInternalServerError)
 				w.Write([]byte(err.Error()))

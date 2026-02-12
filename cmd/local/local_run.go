@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +34,24 @@ var (
 	flagBefore = flag.String("to", before.Format(DatePattern), "start date")
 	flagAfter  = flag.String("from", after.Format(DatePattern), "end date")
 )
+
+func renderProgressBar(fetched int, total int) string {
+	const width = 30
+	if total <= 0 {
+		return fmt.Sprintf("[%s] %d", strings.Repeat("=", width), fetched)
+	}
+	if fetched < 0 {
+		fetched = 0
+	}
+	if fetched > total {
+		fetched = total
+	}
+	filled := int((float64(fetched) / float64(total)) * float64(width))
+	if filled > width {
+		filled = width
+	}
+	return fmt.Sprintf("[%s%s] %d/%d", strings.Repeat("=", filled), strings.Repeat(" ", width-filled), fetched, total)
+}
 
 func main() {
 
@@ -102,7 +121,20 @@ func main() {
 		log.Println("using default start time", after)
 	}
 
-	k, err := kmlapi.BuildKML(kmlapi.NewToken(token), &before, &after)
+	currentStage := ""
+	k, err := kmlapi.BuildKMLWithProgress(kmlapi.NewToken(token), &before, &after, func(stage string, fetched int, total int) {
+		if stage != currentStage {
+			if currentStage != "" {
+				fmt.Println()
+			}
+			currentStage = stage
+			fmt.Printf("%s: ", stage)
+		}
+		fmt.Printf("\r%s: %s", stage, renderProgressBar(fetched, total))
+		if total > 0 && fetched >= total {
+			fmt.Println()
+		}
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
