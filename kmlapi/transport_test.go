@@ -61,7 +61,7 @@ func TestFetchCheckinsPaginatesAndAggregatesByVenue(t *testing.T) {
 	before := time.Unix(1000, 0)
 	after := time.Unix(10, 0)
 
-	byVenue, err := FetchCheckins(NewToken("token"), &before, &after, nil)
+	byVenue, _, err := FetchCheckins(NewToken("token"), &before, &after, nil)
 	if err != nil {
 		t.Fatalf("FetchCheckins returned error: %v", err)
 	}
@@ -82,8 +82,87 @@ func TestFetchCheckinsReturnsErrorOnNon2xx(t *testing.T) {
 		http.Error(w, "upstream down", http.StatusBadGateway)
 	})
 
-	_, err := FetchCheckins(NewToken("token"), nil, nil, nil)
+	_, _, err := FetchCheckins(NewToken("token"), nil, nil, nil)
 	if err == nil {
 		t.Fatal("expected error for non-2xx checkins response")
+	}
+}
+
+func TestFetchVenuesPaginatesAndAggregates(t *testing.T) {
+	requests := 0
+	sawUnpaged := false
+	sawPaged := false
+	withMockFSQServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/users/self/venuehistory" {
+			http.NotFound(w, r)
+			return
+		}
+		requests++
+		limit := r.URL.Query().Get("limit")
+		offsetStr := r.URL.Query().Get("offset")
+
+		if limit == "" && offsetStr == "" {
+			sawUnpaged = true
+			fmt.Fprint(w, `{
+				"response": {
+					"venues": {
+						"count": 251,
+						"items": [
+							{"venue": {"id":"v1","name":"Venue 1","location":{"lat":1.1,"lng":2.2},"categories":[]}},
+							{"venue": {"id":"v2","name":"Venue 2","location":{"lat":3.3,"lng":4.4},"categories":[]}}
+						]
+					}
+				}
+			}`)
+			return
+		}
+
+		if limit != "250" {
+			t.Fatalf("expected limit=250 for paged requests, got %q", limit)
+		}
+		offset, err := strconv.Atoi(offsetStr)
+		if err != nil {
+			t.Fatalf("invalid offset: %v", err)
+		}
+		sawPaged = true
+
+		switch offset {
+		case 2:
+			fmt.Fprint(w, `{
+				"response": {
+					"venues": {
+						"count": 251,
+						"items": [
+							{"venue": {"id":"v3","name":"Venue 3","location":{"lat":5.5,"lng":6.6},"categories":[]}}
+						]
+					}
+				}
+			}`)
+		default:
+			fmt.Fprint(w, `{"response":{"venues":{"count":251,"items":[]}}}`)
+		}
+	})
+
+	before := time.Unix(1000, 0)
+	after := time.Unix(10, 0)
+	venues, err := FetchVenues(NewToken("token"), &before, &after, nil)
+	if err != nil {
+		t.Fatalf("FetchVenues returned error: %v", err)
+	}
+
+	if requests != 2 {
+		t.Fatalf("expected 2 total requests (1 unpaged + 1 paged), got %d", requests)
+	}
+	if !sawUnpaged {
+		t.Fatal("expected to see an initial unpaged venue request")
+	}
+	if !sawPaged {
+		t.Fatal("expected to see paged venue fallback request")
+	}
+	if len(venues) != 3 {
+		t.Fatalf("expected 3 venues, got %d", len(venues))
+	}
+	if venues[0].Id != "v1" || venues[1].Id != "v2" || venues[2].Id != "v3" {
+		t.Fatalf("unexpected venue order/ids: %#v", venues)
 	}
 }

@@ -10,10 +10,23 @@ import (
 )
 
 const Year = time.Duration(24*365) * time.Hour
+const unknownCategoryFolder = "Unknown"
 
 type TopLevel map[string]string
 type Root map[string]string
 type ProgressCallback func(stage string, fetched int, total int)
+type ExportStats struct {
+	VenuesFetched                 int
+	VenuesExported                int
+	UnknownCategoryVenues         int
+	CheckinsRawFetched            int
+	CheckinsUniqueRetained        int
+	CheckinsMatchedToVenues       int
+	CheckinsUnmatchedToVenues     int
+	UnmatchedVenueIDs             int
+	CheckinsMissingVenueOrTime    int
+	CheckinsDeduplicatedByVenueTs int
+}
 
 func reportProgress(progress ProgressCallback, stage string, fetched int, total int) {
 	if progress != nil {
@@ -59,17 +72,39 @@ func BuildKML(token FSQToken, before *time.Time, after *time.Time) (*kml.Compoun
 }
 
 func BuildKMLWithProgress(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) (*kml.CompoundElement, error) {
+	k, _, err := BuildKMLWithProgressAndStats(token, before, after, progress)
+	return k, err
+}
 
+func BuildKMLWithProgressAndStats(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) (*kml.CompoundElement, ExportStats, error) {
+	stats := ExportStats{}
 	venues, err := FetchVenues(token, before, after, progress)
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
-	checkinsByVenue, err := FetchCheckins(token, before, after, progress)
+	stats.VenuesFetched = len(venues)
+
+	checkinsByVenue, checkinStats, err := FetchCheckins(token, before, after, progress)
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
+	stats.CheckinsRawFetched = checkinStats.RawCheckinsFetched
+	stats.CheckinsUniqueRetained = checkinStats.UniqueCheckinsRetained
+	stats.CheckinsMissingVenueOrTime = checkinStats.MissingVenueOrTimestamp
+	stats.CheckinsDeduplicatedByVenueTs = checkinStats.DeduplicatedByVenueAndTime
+
+	venueSet := make(map[string]struct{}, len(venues))
 	for i := range venues {
+		venueSet[venues[i].Id] = struct{}{}
 		venues[i].VisitTimestamps = checkinsByVenue[venues[i].Id]
+	}
+	for venueID, timestamps := range checkinsByVenue {
+		if _, ok := venueSet[venueID]; ok {
+			stats.CheckinsMatchedToVenues += len(timestamps)
+			continue
+		}
+		stats.UnmatchedVenueIDs++
+		stats.CheckinsUnmatchedToVenues += len(timestamps)
 	}
 
 	folders := make(map[string]*kml.CompoundElement)
@@ -88,7 +123,7 @@ func BuildKMLWithProgress(token FSQToken, before *time.Time, after *time.Time, p
 
 	categoriesMap, idToName, err := ResolveCategories(token)
 	if err != nil {
-		return nil, err
+		return nil, stats, err
 	}
 
 	for _, item := range venues {
@@ -100,10 +135,23 @@ func BuildKMLWithProgress(token FSQToken, before *time.Time, after *time.Time, p
 				kml.Coordinates(kml.Coordinate{Lon: item.Location.Lng, Lat: item.Location.Lat}),
 			),
 		)
+
+		if len(item.Categories) == 0 {
+			stats.UnknownCategoryVenues++
+			folder := folders[unknownCategoryFolder]
+			if folder == nil {
+				folder = kml.Folder(kml.Name(unknownCategoryFolder))
+				folders[unknownCategoryFolder] = folder
+			}
+			folder.Add(place)
+			stats.VenuesExported++
+			continue
+		}
+
 		for _, c := range item.Categories {
 			topLevelName := idToName[categoriesMap[c.Id]]
 			if topLevelName == "" {
-				topLevelName = "Undefined"
+				topLevelName = unknownCategoryFolder
 			}
 			folder := folders[topLevelName]
 			if folder == nil {
@@ -112,6 +160,7 @@ func BuildKMLWithProgress(token FSQToken, before *time.Time, after *time.Time, p
 			}
 			folder.Add(place)
 		}
+		stats.VenuesExported++
 	}
 
 	for _, f := range folders {
@@ -119,7 +168,7 @@ func BuildKMLWithProgress(token FSQToken, before *time.Time, after *time.Time, p
 	}
 
 	k.Add(d)
-	return k, nil
+	return k, stats, nil
 }
 
 func buildVisitDescription(timestamps []int64) string {

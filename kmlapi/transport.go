@@ -14,6 +14,13 @@ import (
 
 type FSQToken string
 
+type CheckinFetchStats struct {
+	RawCheckinsFetched         int
+	UniqueCheckinsRetained     int
+	MissingVenueOrTimestamp    int
+	DeduplicatedByVenueAndTime int
+}
+
 var defaultHTTPClient = &http.Client{
 	Timeout: 15 * time.Second,
 }
@@ -30,6 +37,8 @@ const (
 
 	checkinsPageLimit = 250
 	maxCheckinsPages  = 1000
+	venuesPageLimit   = 250
+	maxVenuesPages    = 1000
 )
 
 func commonQuery(token FSQToken) url.Values {
@@ -77,18 +86,6 @@ func NewToken(s string) FSQToken {
 }
 
 func FetchVenues(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) ([]Venue, error) {
-
-	q := commonQuery(token)
-
-	if before != nil {
-		q.Add("beforeTimestamp", strconv.FormatInt(before.Unix(), 10))
-	}
-	if after != nil {
-		q.Add("afterTimestamp", strconv.FormatInt(after.Unix(), 10))
-	}
-
-	urlStr := fsqHistory + q.Encode()
-
 	type fsqResponse struct {
 		Response struct {
 			Venues struct {
@@ -100,16 +97,89 @@ func FetchVenues(token FSQToken, before *time.Time, after *time.Time, progress P
 		} `json:"response"`
 	}
 
-	fsq := fsqResponse{}
-	if err := getJSON(urlStr, &fsq); err != nil {
+	venues := make([]Venue, 0, venuesPageLimit)
+	seen := make(map[string]struct{})
+	// First request without paging params. This endpoint historically returns
+	// far more records in this mode than with forced limit/offset.
+	base := commonQuery(token)
+	if before != nil {
+		base.Add("beforeTimestamp", strconv.FormatInt(before.Unix(), 10))
+	}
+	if after != nil {
+		base.Add("afterTimestamp", strconv.FormatInt(after.Unix(), 10))
+	}
+
+	first := fsqResponse{}
+	if err := getJSON(fsqHistory+base.Encode(), &first); err != nil {
 		return nil, err
 	}
-	venues := make([]Venue, len(fsq.Response.Venues.Items))
-	for i, v := range fsq.Response.Venues.Items {
-		venues[i] = v.Venue
-	}
-	reportProgress(progress, "venues", len(venues), fsq.Response.Venues.Count)
 
+	for _, item := range first.Response.Venues.Items {
+		if item.Venue.Id == "" {
+			continue
+		}
+		if _, exists := seen[item.Venue.Id]; exists {
+			continue
+		}
+		seen[item.Venue.Id] = struct{}{}
+		venues = append(venues, item.Venue)
+	}
+	reportProgress(progress, "venues", len(venues), first.Response.Venues.Count)
+
+	// If count claims more than returned, attempt paged fallback.
+	if first.Response.Venues.Count > len(first.Response.Venues.Items) {
+		offset := len(first.Response.Venues.Items)
+		for page := 0; page < maxVenuesPages; page++ {
+			q := commonQuery(token)
+			q.Add("limit", strconv.Itoa(venuesPageLimit))
+			q.Add("offset", strconv.Itoa(offset))
+			if before != nil {
+				q.Add("beforeTimestamp", strconv.FormatInt(before.Unix(), 10))
+			}
+			if after != nil {
+				q.Add("afterTimestamp", strconv.FormatInt(after.Unix(), 10))
+			}
+
+			var fsq fsqResponse
+			if err := getJSON(fsqHistory+q.Encode(), &fsq); err != nil {
+				return nil, err
+			}
+
+			items := fsq.Response.Venues.Items
+			if len(items) == 0 {
+				break
+			}
+
+			added := 0
+			for _, item := range items {
+				if item.Venue.Id == "" {
+					continue
+				}
+				if _, exists := seen[item.Venue.Id]; exists {
+					continue
+				}
+				seen[item.Venue.Id] = struct{}{}
+				venues = append(venues, item.Venue)
+				added++
+			}
+
+			offset += len(items)
+			reportProgress(progress, "venues", len(venues), first.Response.Venues.Count)
+			if first.Response.Venues.Count > 0 && offset >= first.Response.Venues.Count {
+				break
+			}
+			if len(items) < venuesPageLimit {
+				break
+			}
+			if added == 0 {
+				break
+			}
+		}
+	}
+
+	// Some upstream counts can include entries not returned in items.
+	// Emit a final normalized progress event to mark completion.
+	reportProgress(progress, "venues", len(venues), len(venues))
 	return venues, nil
 }
 
@@ -125,7 +195,7 @@ func FetchCategories(token FSQToken) ([]GlobalCategory, error) {
 	return fsq.Response.Categories, nil
 }
 
-func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) (map[string][]int64, error) {
+func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress ProgressCallback) (map[string][]int64, CheckinFetchStats, error) {
 	type checkinItem struct {
 		CreatedAt int64 `json:"createdAt"`
 		Venue     struct {
@@ -145,6 +215,7 @@ func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress
 	checkinsByVenue := make(map[string][]int64)
 	seenByVenue := make(map[string]map[int64]struct{})
 	offset := 0
+	stats := CheckinFetchStats{}
 
 	for page := 0; page < maxCheckinsPages; page++ {
 		q := commonQuery(token)
@@ -159,16 +230,18 @@ func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress
 
 		var fsq fsqResponse
 		if err := getJSON(fsqCheckins+q.Encode(), &fsq); err != nil {
-			return nil, err
+			return nil, stats, err
 		}
 
 		items := fsq.Response.Checkins.Items
 		if len(items) == 0 {
 			break
 		}
+		stats.RawCheckinsFetched += len(items)
 
 		for _, item := range items {
 			if item.Venue.Id == "" || item.CreatedAt == 0 {
+				stats.MissingVenueOrTimestamp++
 				continue
 			}
 			seen := seenByVenue[item.Venue.Id]
@@ -177,10 +250,12 @@ func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress
 				seenByVenue[item.Venue.Id] = seen
 			}
 			if _, exists := seen[item.CreatedAt]; exists {
+				stats.DeduplicatedByVenueAndTime++
 				continue
 			}
 			seen[item.CreatedAt] = struct{}{}
 			checkinsByVenue[item.Venue.Id] = append(checkinsByVenue[item.Venue.Id], item.CreatedAt)
+			stats.UniqueCheckinsRetained++
 		}
 
 		offset += len(items)
@@ -195,8 +270,9 @@ func FetchCheckins(token FSQToken, before *time.Time, after *time.Time, progress
 			return checkinsByVenue[venueID][i] > checkinsByVenue[venueID][j]
 		})
 	}
+	reportProgress(progress, "checkins", offset, offset)
 
-	return checkinsByVenue, nil
+	return checkinsByVenue, stats, nil
 }
 
 func PreAuthenticate(clientId string, redirectUri string) string {

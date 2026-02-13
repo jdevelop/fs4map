@@ -124,6 +124,14 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 									"location": {"lat": 1.1, "lng": 2.2},
 									"categories": [{"id": "child-coffee", "name": "Coffee Shop"}]
 								}
+							},
+							{
+								"venue": {
+									"id": "v2",
+									"name": "Mystery Place",
+									"location": {"lat": 3.3, "lng": 4.4},
+									"categories": []
+								}
 							}
 						]
 					}
@@ -142,6 +150,10 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 							{
 								"createdAt": 1770770687,
 								"venue": {"id": "v1"}
+							},
+							{
+								"createdAt": 1770700000,
+								"venue": {"id": "v2"}
 							}
 						]
 					}
@@ -169,8 +181,14 @@ func TestBuildKMLBuildsFolderedOutput(t *testing.T) {
 	if !strings.Contains(out, "<name>Food</name>") {
 		t.Fatalf("expected top-level folder name in KML output, got: %s", out)
 	}
+	if !strings.Contains(out, "<name>Unknown</name>") {
+		t.Fatalf("expected Unknown folder in KML output, got: %s", out)
+	}
 	if !strings.Contains(out, "<name>Cafe One</name>") {
 		t.Fatalf("expected placemark name in KML output, got: %s", out)
+	}
+	if !strings.Contains(out, "<name>Mystery Place</name>") {
+		t.Fatalf("expected uncategorized venue placemark in KML output, got: %s", out)
 	}
 	if !strings.Contains(out, "Visit count: 2") {
 		t.Fatalf("expected visit count in KML output, got: %s", out)

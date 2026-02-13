@@ -122,7 +122,7 @@ func main() {
 	}
 
 	currentStage := ""
-	k, err := kmlapi.BuildKMLWithProgress(kmlapi.NewToken(token), &before, &after, func(stage string, fetched int, total int) {
+	k, stats, err := kmlapi.BuildKMLWithProgressAndStats(kmlapi.NewToken(token), &before, &after, func(stage string, fetched int, total int) {
 		if stage != currentStage {
 			if currentStage != "" {
 				fmt.Println()
@@ -144,8 +144,38 @@ func main() {
 		log.Fatal(err)
 	}
 
-	k.WriteIndent(w, "", "  ")
-	w.Sync()
-	w.Close()
+	if err := k.WriteIndent(w, "", "  "); err != nil {
+		log.Fatal(err)
+	}
+	if err := w.Sync(); err != nil {
+		log.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		log.Fatal(err)
+	}
+
+	if stats.UnmatchedVenueIDs > 0 {
+		log.Printf("WARN: %d venue IDs from checkins were not present in fetched venue details (%d checkins unmatched)",
+			stats.UnmatchedVenueIDs, stats.CheckinsUnmatchedToVenues)
+	}
+	if stats.CheckinsMissingVenueOrTime > 0 {
+		log.Printf("WARN: skipped %d checkins with missing venue.id or createdAt", stats.CheckinsMissingVenueOrTime)
+	}
+	if stats.CheckinsDeduplicatedByVenueTs > 0 {
+		log.Printf("WARN: deduplicated %d checkins by (venue.id, createdAt)", stats.CheckinsDeduplicatedByVenueTs)
+	}
+
+	fmt.Println("Export stats:")
+	fmt.Printf("  Venues fetched: %d\n", stats.VenuesFetched)
+	fmt.Printf("  Venues exported: %d\n", stats.VenuesExported)
+	fmt.Printf("  Unknown-category venues: %d\n", stats.UnknownCategoryVenues)
+	fmt.Printf("  Checkins raw fetched: %d\n", stats.CheckinsRawFetched)
+	fmt.Printf("  Checkins retained after cleaning/dedupe: %d\n", stats.CheckinsUniqueRetained)
+	fmt.Printf("  Checkins matched to exported venues: %d\n", stats.CheckinsMatchedToVenues)
+	fmt.Printf("  Checkins unmatched to venue details: %d\n", stats.CheckinsUnmatchedToVenues)
+	fmt.Printf("  Unmatched checkin venue IDs: %d\n", stats.UnmatchedVenueIDs)
+	fmt.Printf("  Checkins skipped (missing venue/time): %d\n", stats.CheckinsMissingVenueOrTime)
+	fmt.Printf("  Checkins deduplicated (venue/time): %d\n", stats.CheckinsDeduplicatedByVenueTs)
+	fmt.Printf("  Output file: %s\n", fmt.Sprintf("export-%s-%s.kml", after.Format(DatePattern), before.Format(DatePattern)))
 
 }
