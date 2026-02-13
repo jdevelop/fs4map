@@ -1,0 +1,207 @@
+:root {
+  --bg: #090b13;
+  --bg-soft: #111629;
+  --surface: rgba(15, 20, 35, 0.82);
+  --surface-strong: rgba(10, 13, 24, 0.94);
+  --border: rgba(132, 163, 201, 0.26);
+  --text: #d8deef;
+  --muted: #8f9cbb;
+  --accent: #58b6d8;
+  --accent-2: #c88adf;
+  --glow: rgba(88, 182, 216, 0.25);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1000px 550px at 14% 8%, rgba(79, 125, 176, 0.23), transparent 64%),
+    radial-gradient(900px 520px at 85% 16%, rgba(148, 92, 151, 0.19), transparent 62%),
+    linear-gradient(160deg, var(--bg), #0d1222 62%, #0b1020);
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100%;
+}
+
+.map-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 0;
+  position: relative;
+}
+
+.map-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  background:
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 4px),
+    linear-gradient(130deg, transparent 0 75%, rgba(88, 182, 216, 0.05) 100%);
+  mix-blend-mode: screen;
+  opacity: 0.35;
+}
+
+.map-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(420px 240px at 19% 82%, rgba(200, 138, 223, 0.13), transparent 74%),
+    radial-gradient(500px 270px at 84% 24%, rgba(88, 182, 216, 0.14), transparent 72%);
+}
+
+.toolbar {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(7px);
+  box-shadow: 0 16px 35px rgba(4, 6, 12, 0.45);
+}
+
+.toolbar h1 {
+  margin: 0;
+  font-size: 1.08rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #d5d9ec;
+  text-shadow: 0 0 14px rgba(200, 138, 223, 0.2);
+}
+
+.status {
+  margin: 0;
+  min-height: 1.2rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-family: "JetBrains Mono", monospace;
+  letter-spacing: 0.015em;
+}
+
+.map {
+  min-height: 55vh;
+  height: 100%;
+  z-index: 0;
+}
+
+.legend {
+  background:
+    linear-gradient(165deg, rgba(14, 19, 34, 0.92), rgba(12, 16, 30, 0.88));
+  border-right: 1px solid var(--border);
+  padding: 0.85rem;
+  overflow: auto;
+  backdrop-filter: blur(8px);
+  z-index: 3;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+}
+
+.legend h2 {
+  margin: 0 0 0.7rem 0;
+  font-size: 0.8rem;
+  color: #9cb0d5;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  font-weight: 700;
+}
+
+#legend-items {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.legend-item {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+  color: #ccd4ea;
+  padding: 0.22rem 0.1rem;
+  border-radius: 6px;
+}
+
+.legend-item:hover {
+  background: rgba(90, 132, 180, 0.09);
+}
+
+.legend-swatch {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 2px;
+  border: 1px solid rgba(224, 235, 255, 0.28);
+  box-shadow: 0 0 12px var(--glow);
+}
+
+.legend-count {
+  color: var(--muted);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+}
+
+.legend input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+#map .leaflet-tile {
+  filter: grayscale(0.3) saturate(0.72) brightness(0.53) contrast(1.2) hue-rotate(186deg);
+}
+
+#map .leaflet-control-layers,
+#map .leaflet-bar a {
+  background: var(--surface-strong);
+  color: #c3cfeb;
+  border-color: var(--border);
+  box-shadow: 0 8px 24px rgba(5, 7, 15, 0.58);
+}
+
+#map .leaflet-control-layers-expanded {
+  background: var(--surface-strong);
+  color: #c3cfeb;
+}
+
+#map .leaflet-popup-content-wrapper,
+#map .leaflet-popup-tip {
+  background: rgba(11, 15, 27, 0.95);
+  color: #dbe3f3;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 30px rgba(6, 8, 16, 0.7);
+}
+
+#map .leaflet-popup-content {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+#map .leaflet-container {
+  background: linear-gradient(180deg, #0a1020, #0b111f);
+}
+
+@media (max-width: 760px) {
+  .map-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .legend {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+}
